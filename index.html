@@ -137,7 +137,8 @@
       const val = queryInput.value.trim();
       if (!val) return;
 
-      const wispServer = wispInput.value.trim();
+      let wispServer = wispInput.value.trim();
+      if (!wispServer.endsWith('/')) wispServer += '/';
       localStorage.setItem('custom_wisp_url', wispServer);
 
       const targetUrl = formatTargetUrl(val);
@@ -176,7 +177,7 @@
         statusEl.textContent = step;
 
         const response = await transport.request(
-          new URL(targetUrl),
+          targetUrl,
           'GET',
           null,
           Object.entries({ 'User-Agent': navigator.userAgent })
@@ -208,4 +209,5 @@
   </script>
 </body>
 </html>
+
 
