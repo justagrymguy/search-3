@@ -10,7 +10,7 @@
         document.getElementById('searchForm').addEventListener('submit', function(e) {
           e.preventDefault();
           const q = encodeURIComponent(document.getElementById('query').value);
-          window.open('https://' + 'google.com/?q=' + q, '_blank');
+          window.open('https://' + '://google.com/?q=' + q, '_blank');
         });
       </script>
     </body>
