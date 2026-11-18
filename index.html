@@ -143,7 +143,7 @@
       try {
         const cdnUrl = ['https://cdn.jsdelivr.net', 'npm', '@mercuryworkshop/epoxy-transport', '+esm'].join('/');
         const mod = await import(cdnUrl);
-        const EpoxyTransport = mod.default || mod.EpoxyTransport;
+        const EpoxyTransport = mod.default || mod.EpoxyClient || mod.EpoxyTransport;
 
         statusEl.textContent = 'Step 2/3: Connecting to Wisp...';
         const transport = new EpoxyTransport({ wisp: wispServer });
@@ -153,13 +153,15 @@
         const response = await transport.request(
           new URL(targetUrl),
           'GET',
-          new Headers({ 'User-Agent': navigator.userAgent }),
-          null
+          null,
+          { 'User-Agent': navigator.userAgent }
         );
 
-        const html = await response.body.text();
+        const html = await new Response(response.body).text();
         const baseTag = '<base href="' + targetUrl + '" />';
-        const patchedHtml = html.replace(/<head[^>]*>/i, (match) => match + baseTag);
+        const patchedHtml = /<head[^>]*>/i.test(html)
+          ? html.replace(/<head[^>]*>/i, (match) => match + baseTag)
+          : baseTag + html;
 
         const blob = new Blob([patchedHtml], { type: 'text/html' });
         viewport.src = URL.createObjectURL(blob);
