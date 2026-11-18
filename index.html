@@ -22,7 +22,7 @@
       align-items: center;
       gap: 14px;
     }
-    form {
+    .row {
       display: flex;
       gap: 10px;
     }
@@ -34,7 +34,7 @@
       width: 300px;
       outline: none;
     }
-    button[type="submit"] {
+    button {
       padding: 12px 20px;
       font-size: 16px;
       border-radius: 8px;
@@ -75,13 +75,6 @@
       right: 16px;
       z-index: 9999;
       padding: 10px 16px;
-      border-radius: 8px;
-      border: none;
-      background: #3b82f6;
-      color: white;
-      font-weight: bold;
-      cursor: pointer;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
     }
     #viewport {
       display: none;
@@ -98,23 +91,23 @@
 <body>
   <div id="ui">
     <h1 style="margin: 0;">Custom Search</h1>
-    <form id="searchForm">
-      <input id="query" type="text" placeholder="Search Google or enter URL..." required />
-      <button type="submit">Go</button>
-    </form>
+    <div class="row">
+      <input id="query" type="text" placeholder="Search or enter URL..." />
+      <button id="goBtn" type="button">Go</button>
+    </div>
     <div class="wisp-row">
       <label for="wispUrl">Wisp Server:</label>
       <input id="wispUrl" type="text" value="wss://wisp.mercurywork.shop/" />
     </div>
-    <div id="status">Ready</div>
+    <div id="status">Script Active</div>
   </div>
 
-  <button id="homeBtn">Home</button>
+  <button id="homeBtn" type="button">Home</button>
   <iframe id="viewport"></iframe>
 
   <script>
-    const form = document.getElementById('searchForm');
     const queryInput = document.getElementById('query');
+    const goBtn = document.getElementById('goBtn');
     const wispInput = document.getElementById('wispUrl');
     const statusEl = document.getElementById('status');
     const viewport = document.getElementById('viewport');
@@ -124,53 +117,38 @@
       wispInput.value = localStorage.getItem('custom_wisp_url');
     }
 
-    homeBtn.addEventListener('click', () => {
+    homeBtn.onclick = () => {
       viewport.style.display = 'none';
       homeBtn.style.display = 'none';
       viewport.src = 'about:blank';
-    });
+    };
 
     function formatTargetUrl(input) {
       const trimmed = input.trim();
       if (/^https?:\/\//i.test(trimmed)) return trimmed;
       if (/^[a-z0-9-]+(\.[a-z0-9-]+)+/i.test(trimmed)) return 'https://' + trimmed;
-      return 'https://google.com' + encodeURIComponent(trimmed);
+      return 'https://duckduckgo.com' + encodeURIComponent(trimmed);
     }
 
-    async function loadEpoxy() {
-      const urls = [
-        'https://jsdelivr.net',
-        'https://unpkg.com',
-        'https://esm.sh'
-      ];
-      let lastErr;
-      for (const u of urls) {
-        try {
-          const mod = await import(u);
-          return mod.default || mod.EpoxyTransport;
-        } catch (e) {
-          lastErr = e;
-        }
-      }
-      throw new Error('Could not load transport from CDNs: ' + (lastErr?.message || 'Blocked'));
-    }
+    async function runSearch() {
+      const val = queryInput.value.trim();
+      if (!val) return;
 
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
       const wispServer = wispInput.value.trim();
       localStorage.setItem('custom_wisp_url', wispServer);
 
-      const targetUrl = formatTargetUrl(queryInput.value);
+      const targetUrl = formatTargetUrl(val);
       statusEl.textContent = 'Step 1/3: Loading Epoxy module...';
 
       try {
-        const EpoxyTransport = await loadEpoxy();
+        const mod = await import('https://jsdelivr.net');
+        const EpoxyTransport = mod.default || mod.EpoxyTransport;
 
-        statusEl.textContent = 'Step 2/3: Connecting to Wisp server...';
+        statusEl.textContent = 'Step 2/3: Connecting to Wisp...';
         const transport = new EpoxyTransport({ wisp: wispServer });
         await transport.init();
 
-        statusEl.textContent = 'Step 3/3: Fetching ' + targetUrl + '...';
+        statusEl.textContent = 'Step 3/3: Fetching page...';
         const response = await transport.request(
           new URL(targetUrl),
           'GET',
@@ -179,18 +157,23 @@
         );
 
         const html = await response.body.text();
-        const baseTag = `<base href="${targetUrl}" />`;
+        const baseTag = '<base href="' + targetUrl + '" />';
         const patchedHtml = html.replace(/<head[^>]*>/i, (match) => match + baseTag);
 
         const blob = new Blob([patchedHtml], { type: 'text/html' });
         viewport.src = URL.createObjectURL(blob);
         viewport.style.display = 'block';
         homeBtn.style.display = 'block';
-        statusEl.textContent = 'Ready';
+        statusEl.textContent = 'Script Active';
       } catch (err) {
         statusEl.textContent = 'Error: ' + err.message;
       }
-    });
+    }
+
+    goBtn.onclick = runSearch;
+    queryInput.onkeydown = (e) => {
+      if (e.key === 'Enter') runSearch();
+    };
   </script>
 </body>
 </html>
