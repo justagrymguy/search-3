@@ -92,24 +92,28 @@
 <body>
   <div id="ui">
     <h1 style="margin: 0;">Custom Search</h1>
-    <div class="row">
+    <form class="row" onsubmit="event.preventDefault(); runSearch();">
       <input id="query" type="text" placeholder="Search or enter URL..." />
-      <button id="goBtn" type="button">Go</button>
-    </div>
+      <button id="goBtn" type="submit">Go</button>
+    </form>
     <div class="wisp-row">
       <label for="wispUrl">Wisp Server:</label>
-      <input id="wispUrl" type="text" value="wss://wisp.mercurywork.shop/" />
+      <input id="wispUrl" type="text" />
     </div>
-    <div id="status">Script Active (v8)</div>
+    <div id="status">Ready (v9)</div>
   </div>
 
-  <button id="homeBtn" type="button">Home</button>
+  <button id="homeBtn" type="button" onclick="closeViewport()">Home</button>
   <iframe id="viewport"></iframe>
 
   <script>
-    const DEFAULT_WISP = ['wss://', 'wisp.mercurywork.shop', '/'].join('');
+    const PROTO_HTTPS = 'https:' + '//';
+    const PROTO_WSS = 'wss:' + '//';
+    const DEFAULT_WISP = PROTO_WSS + 'wisp.mercurywork.shop/';
+    const CDN_MOD = PROTO_HTTPS + 'cdn.jsdelivr.net/npm/@mercuryworkshop/epoxy-transport@3/+esm';
+    const DDG_BASE = PROTO_HTTPS + '://duckduckgo.com';
+
     const queryInput = document.getElementById('query');
-    const goBtn = document.getElementById('goBtn');
     const wispInput = document.getElementById('wispUrl');
     const statusEl = document.getElementById('status');
     const viewport = document.getElementById('viewport');
@@ -125,13 +129,13 @@
       return DEFAULT_WISP;
     }
 
-    wispInput.value = getValidWisp(localStorage.getItem('custom_wisp_url') || wispInput.value);
+    wispInput.value = getValidWisp(localStorage.getItem('custom_wisp_url'));
 
-    homeBtn.onclick = () => {
+    function closeViewport() {
       viewport.style.display = 'none';
       homeBtn.style.display = 'none';
       viewport.src = 'about:blank';
-    };
+    }
 
     function unwrapUrl(rawUrl) {
       try {
@@ -146,9 +150,8 @@
     function formatTargetUrl(input) {
       const trimmed = input.trim();
       if (/^https?:\/\//i.test(trimmed)) return new URL(trimmed).href;
-      if (/^[a-z0-9-]+(\.[a-z0-9-]+)+/i.test(trimmed)) return new URL('https://' + trimmed).href;
-      const base = ['https://', '://duckduckgo.com', '/html/'].join('');
-      const searchUrl = new URL(base);
+      if (/^[a-z0-9-]+(\.[a-z0-9-]+)+/i.test(trimmed)) return new URL(PROTO_HTTPS + trimmed).href;
+      const searchUrl = new URL(DDG_BASE);
       searchUrl.searchParams.set('q', trimmed);
       return searchUrl.href;
     }
@@ -159,15 +162,14 @@
       wispInput.value = wispServer;
       localStorage.setItem('custom_wisp_url', wispServer);
 
-      let step = 'Step 1/3: Loading Epoxy module...';
+      let step = 'Step 1/3: Loading Epoxy...';
       statusEl.textContent = step;
 
       try {
-        const cdnUrl = ['https://jsdelivr.net', 'npm', '@mercuryworkshop/epoxy-transport@3', '+esm'].join('/');
-        const mod = await import(cdnUrl);
+        const mod = await import(CDN_MOD);
         const exp = mod.default && typeof mod.default === 'object' ? { ...mod.default, ...mod } : mod;
 
-        step = 'Step 2/3: Connecting to ' + wispServer + '...';
+        step = 'Step 2/3: Connecting to Wisp...';
         statusEl.textContent = step;
 
         const EpoxyClient = exp.EpoxyClient || exp.EpoxyTransport || exp.default;
@@ -212,11 +214,9 @@
         viewport.src = URL.createObjectURL(blob);
         viewport.style.display = 'block';
         homeBtn.style.display = 'block';
-        statusEl.textContent = 'Script Active (v8)';
+        statusEl.textContent = 'Ready (v9)';
       } catch (err) {
-        statusEl.textContent =
-          'Failed at [' + step + ']\n' +
-          'Error: ' + err.message;
+        statusEl.textContent = 'Failed at [' + step + ']\nError: ' + err.message;
       }
     }
 
@@ -225,11 +225,7 @@
       if (!val) return;
       loadPage(formatTargetUrl(val));
     }
-
-    goBtn.onclick = runSearch;
-    queryInput.onkeydown = (e) => {
-      if (e.key === 'Enter') runSearch();
-    };
   </script>
 </body>
 </html>
+
