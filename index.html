@@ -63,10 +63,11 @@
     #status {
       font-size: 13px;
       color: #60a5fa;
-      max-width: 460px;
+      max-width: 520px;
       text-align: center;
       min-height: 20px;
       word-break: break-word;
+      white-space: pre-wrap;
     }
     #homeBtn {
       display: none;
@@ -130,13 +131,7 @@
       return 'https://duckduckgo.com' + encodeURIComponent(trimmed);
     }
 
-    async function runSearch( statusEl.textContent = 'Step 3/3: Fetching page...';
-        const response = await transport.request(
-          new URL(targetUrl),
-          'GET',
-          null,
-          Object.entries({ 'User-Agent': navigator.userAgent })
-        );) {
+    async function runSearch() {
       const val = queryInput.value.trim();
       if (!val) return;
 
@@ -147,12 +142,19 @@
       statusEl.textContent = 'Step 1/3: Loading Epoxy module...';
 
       try {
-        const cdnUrl = ['https://cdn.jsdelivr.net', 'npm', '@mercuryworkshop/epoxy-transport', '+esm'].join('/');
+        const cdnUrl = ['https://cdn.jsdelivr.net', 'npm', '@mercuryworkshop/epoxy-transport@3', '+esm'].join('/');
         const mod = await import(cdnUrl);
-        const EpoxyTransport = mod.default || mod.EpoxyClient || mod.EpoxyTransport;
+        const EpoxyClient =
+          mod.EpoxyClient ||
+          (mod.default && mod.default.EpoxyClient) ||
+          (typeof mod.default === 'function' ? mod.default : null);
+
+        if (!EpoxyClient) {
+          throw new Error('Could not find EpoxyClient in exports: ' + Object.keys(mod).join(', '));
+        }
 
         statusEl.textContent = 'Step 2/3: Connecting to Wisp...';
-        const transport = new EpoxyTransport({ wisp: wispServer });
+        const transport = new EpoxyClient({ wisp: wispServer });
         await transport.init();
 
         statusEl.textContent = 'Step 3/3: Fetching page...';
@@ -160,7 +162,7 @@
           new URL(targetUrl),
           'GET',
           null,
-          { 'User-Agent': navigator.userAgent }
+          Object.entries({ 'User-Agent': navigator.userAgent })
         );
 
         const html = await new Response(response.body).text();
@@ -175,7 +177,7 @@
         homeBtn.style.display = 'block';
         statusEl.textContent = 'Script Active';
       } catch (err) {
-        statusEl.textContent = 'Error: ' + err.message;
+        statusEl.textContent = 'Error: ' + err.message + '\n' + (err.stack || '').split('\n').slice(0, 3).join('\n');
       }
     }
 
