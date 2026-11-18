@@ -121,7 +121,7 @@
       <label for="wispUrl">Wisp Server:</label>
       <input id="wispUrl" type="text" value="wss://wisp.mercurywork.shop/" />
     </div>
-    <div id="status">Script Active (v5)</div>
+    <div id="status">Script Active (v6)</div>
   </div>
 
   <div id="loadingToast">Loading via Wisp...</div>
@@ -214,41 +214,42 @@
 
     function injectProxyInterceptor(html, pageUrl) {
       const safePageUrl = JSON.stringify(pageUrl);
-      const interceptorScript = `
-        <base href="${pageUrl.replace(/"/g, '&quot;')}" />
-        <script>
-          (function() {
-            const CURRENT_URL = ${safePageUrl};
-            function resolveUrl(href) {
-              try { return new URL(href, CURRENT_URL).href; } catch (_) { return href; }
-            }
-            document.addEventListener('click', function(e) {
-              const anchor = e.target.closest('a[href]');
-              if (!anchor) return;
-              const rawHref = anchor.getAttribute('href');
-              if (!rawHref || rawHref.startsWith('#') || rawHref.startsWith('javascript:')) return;
-              e.preventDefault();
-              e.stopPropagation();
-              window.parent.postMessage({ type: 'WISP_NAVIGATE', url: resolveUrl(rawHref) }, '*');
-            }, true);
-
-            document.addEventListener('submit', function(e) {
-              const form = e.target;
-              if (!form || !form.action) return;
-              e.preventDefault();
-              e.stopPropagation();
-              const actionUrl = new URL(resolveUrl(form.getAttribute('action') || CURRENT_URL));
-              const formData = new FormData(form);
-              if ((form.method || 'GET').toUpperCase() === 'GET') {
-                for (const [k, v] of formData.entries()) {
-                  actionUrl.searchParams.set(k, v);
-                }
-                window.parent.postMessage({ type: 'WISP_NAVIGATE', url: actionUrl.href }, '*');
-              }
-            }, true);
-          })();
-        <\/script>
-      `;
+      const openScript = '<' + 'script>';
+      const closeScript = '<' + '/script>';
+      const interceptorScript = [
+        '<base href="' + pageUrl.replace(/"/g, '&quot;') + '" />',
+        openScript,
+        '(function() {',
+        '  const CURRENT_URL = ' + safePageUrl + ';',
+        '  function resolveUrl(href) {',
+        '    try { return new URL(href, CURRENT_URL).href; } catch (_) { return href; }',
+        '  }',
+        '  document.addEventListener("click", function(e) {',
+        '    const anchor = e.target.closest("a[href]");',
+        '    if (!anchor) return;',
+        '    const rawHref = anchor.getAttribute("href");',
+        '    if (!rawHref || rawHref.startsWith("#") || rawHref.startsWith("javascript:")) return;',
+        '    e.preventDefault();',
+        '    e.stopPropagation();',
+        '    window.parent.postMessage({ type: "WISP_NAVIGATE", url: resolveUrl(rawHref) }, "*");',
+        '  }, true);',
+        '  document.addEventListener("submit", function(e) {',
+        '    const form = e.target;',
+        '    if (!form || !form.action) return;',
+        '    e.preventDefault();',
+        '    e.stopPropagation();',
+        '    const actionUrl = new URL(resolveUrl(form.getAttribute("action") || CURRENT_URL));',
+        '    const formData = new FormData(form);',
+        '    if ((form.method || "GET").toUpperCase() === "GET") {',
+        '      for (const [k, v] of formData.entries()) {',
+        '        actionUrl.searchParams.set(k, v);',
+        '      }',
+        '      window.parent.postMessage({ type: "WISP_NAVIGATE", url: actionUrl.href }, "*");',
+        '    }',
+        '  }, true);',
+        '})();',
+        closeScript
+      ].join('\n');
 
       return /<head[^>]*>/i.test(html)
         ? html.replace(/<head[^>]*>/i, (match) => match + interceptorScript)
@@ -287,7 +288,7 @@
         viewport.style.display = 'block';
         navControls.style.display = 'flex';
         loadingToast.style.display = 'none';
-        statusEl.textContent = 'Script Active (v5)';
+        statusEl.textContent = 'Script Active (v6)';
       } catch (err) {
         loadingToast.style.display = 'none';
         statusEl.textContent = 'Error loading page: ' + err.message;
