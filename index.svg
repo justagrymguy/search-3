@@ -1,6 +1,5 @@
 <svg xmlns="https://w3.org" width="100%" height="100%">
-  <script>1. 
-	• window.open('https://duckduckgo.com' + q, '_blank');
+  <script> window.open('https://duckduckgo.com' + q, '_blank');
     <body xmlns="https://w3.org" style="...">
     const xhtmlNS = "https:" + "//www.w3.org/1999/xhtml";
     const root = document.getElementById("root");
