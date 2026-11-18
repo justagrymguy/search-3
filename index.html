@@ -126,9 +126,11 @@
 
     function formatTargetUrl(input) {
       const trimmed = input.trim();
-      if (/^https?:\/\//i.test(trimmed)) return trimmed;
-      if (/^[a-z0-9-]+(\.[a-z0-9-]+)+/i.test(trimmed)) return 'https://' + trimmed;
-      return 'https://duckduckgo.com' + encodeURIComponent(trimmed);
+      if (/^https?:\/\//i.test(trimmed)) return new URL(trimmed).href;
+      if (/^[a-z0-9-]+(\.[a-z0-9-]+)+/i.test(trimmed)) return new URL('https://' + trimmed).href;
+      const searchUrl = new URL('https://duckduckgo.com');
+      searchUrl.searchParams.set('q', trimmed);
+      return searchUrl.href;
     }
 
     async function runSearch() {
@@ -143,7 +145,7 @@
       statusEl.textContent = step;
 
       try {
-        const cdnUrl = ['https://jsdelivr.net', 'npm', '@mercuryworkshop/epoxy-transport@3', '+esm'].join('/');
+        const cdnUrl = ['https://cdn.jsdelivr.net', 'npm', '@mercuryworkshop/epoxy-transport@3', '+esm'].join('/');
         const mod = await import(cdnUrl);
         const exp = mod.default && typeof mod.default === 'object' ? { ...mod.default, ...mod } : mod;
 
@@ -170,11 +172,11 @@
           await transport.init();
         }
 
-        step = 'Step 3/3: Fetching page...';
+        step = 'Step 3/3: Fetching ' + targetUrl + '...';
         statusEl.textContent = step;
 
         const response = await transport.request(
-          new URL(targetUrl),
+          targetUrl,
           'GET',
           null,
           { 'User-Agent': navigator.userAgent }
