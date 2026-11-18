@@ -69,13 +69,34 @@
       word-break: break-word;
       white-space: pre-wrap;
     }
-    #homeBtn {
+    #navControls {
       display: none;
       position: fixed;
       bottom: 16px;
       right: 16px;
       z-index: 9999;
+      gap: 8px;
+    }
+    #navControls button {
       padding: 10px 16px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    }
+    #backBtn {
+      background: #334155;
+    }
+    #loadingToast {
+      display: none;
+      position: fixed;
+      top: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10000;
+      background: rgba(15, 23, 42, 0.92);
+      color: #93c5fd;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      border: 1px solid #1e3a8a;
     }
     #viewport {
       display: none;
@@ -100,10 +121,14 @@
       <label for="wispUrl">Wisp Server:</label>
       <input id="wispUrl" type="text" value="wss://wisp.mercurywork.shop/" />
     </div>
-    <div id="status">Script Active (v4)</div>
+    <div id="status">Script Active (v5)</div>
   </div>
 
-  <button id="homeBtn" type="button">Home</button>
+  <div id="loadingToast">Loading via Wisp...</div>
+  <div id="navControls">
+    <button id="backBtn" type="button">Back</button>
+    <button id="homeBtn" type="button">Home</button>
+  </div>
   <iframe id="viewport"></iframe>
 
   <script>
@@ -113,7 +138,14 @@
     const wispInput = document.getElementById('wispUrl');
     const statusEl = document.getElementById('status');
     const viewport = document.getElementById('viewport');
+    const navControls = document.getElementById('navControls');
+    const backBtn = document.getElementById('backBtn');
     const homeBtn = document.getElementById('homeBtn');
+    const loadingToast = document.getElementById('loadingToast');
+
+    let activeTransport = null;
+    let activeWispUrl = '';
+    const historyStack = [];
 
     function getValidWisp(raw) {
       try {
@@ -129,50 +161,112 @@
 
     homeBtn.onclick = () => {
       viewport.style.display = 'none';
-      homeBtn.style.display = 'none';
+      navControls.style.display = 'none';
+      loadingToast.style.display = 'none';
       viewport.src = 'about:blank';
+      historyStack.length = 0;
     };
+
+    backBtn.onclick = () => {
+      if (historyStack.length > 1) {
+        historyStack.pop();
+        const prevUrl = historyStack[historyStack.length - 1];
+        loadProxiedUrl(prevUrl, false);
+      }
+    };
+
+    function unwrapRedirectUrl(rawUrl) {
+      try {
+        const parsed = new URL(rawUrl);
+        if (parsed.hostname.includes('duckduckgo.com') && parsed.searchParams.has('uddg')) {
+          return parsed.searchParams.get('uddg');
+        }
+      } catch (_) {}
+      return rawUrl;
+    }
 
     function formatTargetUrl(input) {
       const trimmed = input.trim();
       if (/^https?:\/\//i.test(trimmed)) return new URL(trimmed).href;
       if (/^[a-z0-9-]+(\.[a-z0-9-]+)+/i.test(trimmed)) return new URL('https://' + trimmed).href;
-      const base = ['https://', 'html.duckduckgo.com', '/html/'].join('');
+      const base = ['https://', '://duckduckgo.com', '/html/'].join('');
       const searchUrl = new URL(base);
       searchUrl.searchParams.set('q', trimmed);
       return searchUrl.href;
     }
 
-    async function runSearch() {
-      const val = queryInput.value.trim();
-      if (!val) return;
+    async function getTransport(wispServer) {
+      if (activeTransport && activeWispUrl === wispServer) {
+        return activeTransport;
+      }
+      const cdnUrl = ['https://jsdelivr.net', 'npm', '@mercuryworkshop/epoxy-transport@3', '+esm'].join('/');
+      const mod = await import(cdnUrl);
+      const exp = mod.default && typeof mod.default === 'object' ? { ...mod.default, ...mod } : mod;
+      const EpoxyClient = exp.EpoxyClient || exp.EpoxyTransport || exp.default;
+      const transport = new EpoxyClient({ wisp: wispServer });
+      if (typeof transport.init === 'function') {
+        await transport.init();
+      }
+      activeTransport = transport;
+      activeWispUrl = wispServer;
+      return transport;
+    }
 
+    function injectProxyInterceptor(html, pageUrl) {
+      const safePageUrl = JSON.stringify(pageUrl);
+      const interceptorScript = `
+        <base href="${pageUrl.replace(/"/g, '&quot;')}" />
+        <script>
+          (function() {
+            const CURRENT_URL = ${safePageUrl};
+            function resolveUrl(href) {
+              try { return new URL(href, CURRENT_URL).href; } catch (_) { return href; }
+            }
+            document.addEventListener('click', function(e) {
+              const anchor = e.target.closest('a[href]');
+              if (!anchor) return;
+              const rawHref = anchor.getAttribute('href');
+              if (!rawHref || rawHref.startsWith('#') || rawHref.startsWith('javascript:')) return;
+              e.preventDefault();
+              e.stopPropagation();
+              window.parent.postMessage({ type: 'WISP_NAVIGATE', url: resolveUrl(rawHref) }, '*');
+            }, true);
+
+            document.addEventListener('submit', function(e) {
+              const form = e.target;
+              if (!form || !form.action) return;
+              e.preventDefault();
+              e.stopPropagation();
+              const actionUrl = new URL(resolveUrl(form.getAttribute('action') || CURRENT_URL));
+              const formData = new FormData(form);
+              if ((form.method || 'GET').toUpperCase() === 'GET') {
+                for (const [k, v] of formData.entries()) {
+                  actionUrl.searchParams.set(k, v);
+                }
+                window.parent.postMessage({ type: 'WISP_NAVIGATE', url: actionUrl.href }, '*');
+              }
+            }, true);
+          })();
+        <\/script>
+      `;
+
+      return /<head[^>]*>/i.test(html)
+        ? html.replace(/<head[^>]*>/i, (match) => match + interceptorScript)
+        : interceptorScript + html;
+    }
+
+    async function loadProxiedUrl(rawUrl, pushHistory = true) {
+      const targetUrl = unwrapRedirectUrl(rawUrl);
       const wispServer = getValidWisp(wispInput.value);
       wispInput.value = wispServer;
       localStorage.setItem('custom_wisp_url', wispServer);
 
-      const targetUrl = formatTargetUrl(val);
-      let step = 'Step 1/3: Loading Epoxy module...';
-      statusEl.textContent = step;
+      statusEl.textContent = 'Loading ' + targetUrl + '...';
+      loadingToast.textContent = 'Loading via Wisp...';
+      loadingToast.style.display = 'block';
 
       try {
-        const cdnUrl = ['https://cdn.jsdelivr.net', 'npm', '@mercuryworkshop/epoxy-transport@3', '+esm'].join('/');
-        const mod = await import(cdnUrl);
-        const exp = mod.default && typeof mod.default === 'object' ? { ...mod.default, ...mod } : mod;
-
-        step = 'Step 2/3: Connecting to ' + wispServer + '...';
-        statusEl.textContent = step;
-
-        const EpoxyClient = exp.EpoxyClient || exp.EpoxyTransport || exp.default;
-        const transport = new EpoxyClient({ wisp: wispServer });
-
-        if (typeof transport.init === 'function') {
-          await transport.init();
-        }
-
-        step = 'Step 3/3: Fetching ' + targetUrl + ' via ' + wispServer + '...';
-        statusEl.textContent = step;
-
+        const transport = await getTransport(wispServer);
         const response = await transport.request(
           new URL(targetUrl),
           'GET',
@@ -181,22 +275,36 @@
         );
 
         const html = await new Response(response.body).text();
-        const baseTag = '<base href="' + targetUrl + '" />';
-        const patchedHtml = /<head[^>]*>/i.test(html)
-          ? html.replace(/<head[^>]*>/i, (match) => match + baseTag)
-          : baseTag + html;
+        const patchedHtml = injectProxyInterceptor(html, targetUrl);
+
+        if (pushHistory) {
+          historyStack.push(targetUrl);
+        }
+        backBtn.style.display = historyStack.length > 1 ? 'inline-block' : 'none';
 
         const blob = new Blob([patchedHtml], { type: 'text/html' });
         viewport.src = URL.createObjectURL(blob);
         viewport.style.display = 'block';
-        homeBtn.style.display = 'block';
-        statusEl.textContent = 'Script Active (v4)';
+        navControls.style.display = 'flex';
+        loadingToast.style.display = 'none';
+        statusEl.textContent = 'Script Active (v5)';
       } catch (err) {
-        statusEl.textContent =
-          'Failed at [' + step + ']\n' +
-          'Error: ' + err.message + '\n' +
-          (err.stack || '').split('\n').slice(0, 3).join('\n');
+        loadingToast.style.display = 'none';
+        statusEl.textContent = 'Error loading page: ' + err.message;
       }
+    }
+
+    window.addEventListener('message', (e) => {
+      if (e.data && e.data.type === 'WISP_NAVIGATE' && e.data.url) {
+        loadProxiedUrl(e.data.url, true);
+      }
+    });
+
+    function runSearch() {
+      const val = queryInput.value.trim();
+      if (!val) return;
+      historyStack.length = 0;
+      loadProxiedUrl(formatTargetUrl(val), true);
     }
 
     goBtn.onclick = runSearch;
