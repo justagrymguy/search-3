@@ -100,13 +100,14 @@
       <label for="wispUrl">Wisp Server:</label>
       <input id="wispUrl" type="text" value="wss://wisp.mercurywork.shop/" />
     </div>
-    <div id="status">Script Active</div>
+    <div id="status">Script Active (v4)</div>
   </div>
 
   <button id="homeBtn" type="button">Home</button>
   <iframe id="viewport"></iframe>
 
   <script>
+    const DEFAULT_WISP = ['wss://', 'wisp.mercurywork.shop', '/'].join('');
     const queryInput = document.getElementById('query');
     const goBtn = document.getElementById('goBtn');
     const wispInput = document.getElementById('wispUrl');
@@ -114,9 +115,17 @@
     const viewport = document.getElementById('viewport');
     const homeBtn = document.getElementById('homeBtn');
 
-    if (localStorage.getItem('custom_wisp_url')) {
-      wispInput.value = localStorage.getItem('custom_wisp_url');
+    function getValidWisp(raw) {
+      try {
+        const u = new URL((raw || '').trim());
+        if ((u.protocol === 'wss:' || u.protocol === 'ws:') && u.hostname.includes('.')) {
+          return u.href.endsWith('/') ? u.href : u.href + '/';
+        }
+      } catch (_) {}
+      return DEFAULT_WISP;
     }
+
+    wispInput.value = getValidWisp(localStorage.getItem('custom_wisp_url') || wispInput.value);
 
     homeBtn.onclick = () => {
       viewport.style.display = 'none';
@@ -128,7 +137,8 @@
       const trimmed = input.trim();
       if (/^https?:\/\//i.test(trimmed)) return new URL(trimmed).href;
       if (/^[a-z0-9-]+(\.[a-z0-9-]+)+/i.test(trimmed)) return new URL('https://' + trimmed).href;
-      const searchUrl = new URL('https://duckduckgo.com');
+      const base = ['https://', 'html.duckduckgo.com', '/html/'].join('');
+      const searchUrl = new URL(base);
       searchUrl.searchParams.set('q', trimmed);
       return searchUrl.href;
     }
@@ -137,8 +147,8 @@
       const val = queryInput.value.trim();
       if (!val) return;
 
-      let wispServer = wispInput.value.trim();
-      if (!wispServer.endsWith('/')) wispServer += '/';
+      const wispServer = getValidWisp(wispInput.value);
+      wispInput.value = wispServer;
       localStorage.setItem('custom_wisp_url', wispServer);
 
       const targetUrl = formatTargetUrl(val);
@@ -150,34 +160,21 @@
         const mod = await import(cdnUrl);
         const exp = mod.default && typeof mod.default === 'object' ? { ...mod.default, ...mod } : mod;
 
-        step = 'Step 2/3: Connecting to Wisp...';
+        step = 'Step 2/3: Connecting to ' + wispServer + '...';
         statusEl.textContent = step;
 
-        let transport;
-        if (exp.EpoxyTransport) {
-          transport = new exp.EpoxyTransport({ wisp: wispServer });
-        } else if (exp.EpoxyClient && exp.EpoxyHandlers) {
-          const handlers = new exp.EpoxyHandlers(
-            () => {},
-            () => {},
-            () => {},
-            (err) => console.error('Epoxy error:', err)
-          );
-          transport = new exp.EpoxyClient(handlers, { wisp: wispServer });
-        } else {
-          const Cls = exp.EpoxyClient || exp.default;
-          transport = new Cls({ wisp: wispServer });
-        }
+        const EpoxyClient = exp.EpoxyClient || exp.EpoxyTransport || exp.default;
+        const transport = new EpoxyClient({ wisp: wispServer });
 
         if (typeof transport.init === 'function') {
           await transport.init();
         }
 
-        step = 'Step 3/3: Fetching ' + targetUrl + '...';
+        step = 'Step 3/3: Fetching ' + targetUrl + ' via ' + wispServer + '...';
         statusEl.textContent = step;
 
         const response = await transport.request(
-          targetUrl,
+          new URL(targetUrl),
           'GET',
           null,
           Object.entries({ 'User-Agent': navigator.userAgent })
@@ -193,7 +190,7 @@
         viewport.src = URL.createObjectURL(blob);
         viewport.style.display = 'block';
         homeBtn.style.display = 'block';
-        statusEl.textContent = 'Script Active';
+        statusEl.textContent = 'Script Active (v4)';
       } catch (err) {
         statusEl.textContent =
           'Failed at [' + step + ']\n' +
@@ -209,5 +206,4 @@
   </script>
 </body>
 </html>
-
 
