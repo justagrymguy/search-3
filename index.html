@@ -130,7 +130,13 @@
       return 'https://duckduckgo.com' + encodeURIComponent(trimmed);
     }
 
-    async function runSearch() {
+    async function runSearch( statusEl.textContent = 'Step 3/3: Fetching page...';
+        const response = await transport.request(
+          new URL(targetUrl),
+          'GET',
+          null,
+          Object.entries({ 'User-Agent': navigator.userAgent })
+        );) {
       const val = queryInput.value.trim();
       if (!val) return;
 
