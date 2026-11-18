@@ -149,7 +149,7 @@
         const mod = await import(cdnUrl);
         const exp = mod.default && typeof mod.default === 'object' ? { ...mod.default, ...mod } : mod;
 
-        step = 'Step 2/3: Connecting to Wisp (exports: ' + Object.keys(exp).join(', ') + ')...';
+        step = 'Step 2/3: Connecting to Wisp...';
         statusEl.textContent = step;
 
         let transport;
@@ -176,10 +176,10 @@
         statusEl.textContent = step;
 
         const response = await transport.request(
-          targetUrl,
+          new URL(targetUrl),
           'GET',
           null,
-          { 'User-Agent': navigator.userAgent }
+          Object.entries({ 'User-Agent': navigator.userAgent })
         );
 
         const html = await new Response(response.body).text();
