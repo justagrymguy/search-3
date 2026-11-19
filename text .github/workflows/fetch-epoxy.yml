@@ -1,0 +1,16 @@
+name: Fetch Epoxy
+on: workflow_dispatch
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: curl -L "https://jsdelivr.net" -o epoxy.js
+      - run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add epoxy.js
+          git commit -m "Add epoxy.js"
+          git push
