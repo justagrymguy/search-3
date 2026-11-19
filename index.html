@@ -100,7 +100,7 @@
       <label for="wispUrl">Wisp Server:</label>
       <input id="wispUrl" type="text" />
     </div>
-    <div id="status">Ready (v9)</div>
+    <div id="status">Ready (v11)</div>
   </div>
 
   <button id="homeBtn" type="button" onclick="closeViewport()">Home</button>
@@ -111,7 +111,7 @@
     const PROTO_WSS = 'wss:' + '//';
     const DEFAULT_WISP = PROTO_WSS + 'wisp.mercurywork.shop/';
     const CDN_MOD = PROTO_HTTPS + 'cdn.jsdelivr.net/npm/@mercuryworkshop/epoxy-transport@3/+esm';
-    const DDG_BASE = PROTO_HTTPS + 'duckduckgo.com';
+    const DDG_BASE = PROTO_HTTPS + '://duckduckgo.com';
 
     const queryInput = document.getElementById('query');
     const wispInput = document.getElementById('wispUrl');
@@ -157,39 +157,34 @@
     }
 
     async function loadPage(rawUrl) {
-      const targetUrl = unwrapUrl(rawUrl);
-      const wispServer = getValidWisp(wispInput.value);
-      wispInput.value = wispServer;
-      localStorage.setItem('custom_wisp_url', wispServer);
-
       let step = 'Step 1/3: Loading Epoxy...';
       statusEl.textContent = step;
 
       try {
+        const targetUrl = unwrapUrl(rawUrl);
+        const wispServer = getValidWisp(wispInput.value);
+        wispInput.value = wispServer;
+        localStorage.setItem('custom_wisp_url', wispServer);
+
         const mod = await import(CDN_MOD);
         const exp = mod.default && typeof mod.default === 'object' ? { ...mod.default, ...mod } : mod;
 
         step = 'Step 2/3: Connecting to Wisp...';
         statusEl.textContent = step;
 
-        const EpoxyClient = exp.EpoxyClient || exp.EpoxyTransport || exp.default;
-        const transport = new EpoxyClient({ wisp: wispServer });
+        const EpoxyClient = exp.EpoxyClient || exp.default;
+        const EpoxyClientOptions = exp.EpoxyClientOptions;
+        const options = new EpoxyClientOptions();
+        options.user_agent = navigator.userAgent;
 
-        if (typeof transport.init === 'function') {
-          await transport.init();
-        }
+        const transport = new EpoxyClient(wispServer, options);
 
         step = 'Step 3/3: Fetching ' + targetUrl + '...';
         statusEl.textContent = step;
 
-        const response = await transport.request(
-          new URL(targetUrl),
-          'GET',
-          null,
-          Object.entries({ 'User-Agent': navigator.userAgent })
-        );
+        const response = await transport.fetch(targetUrl, { method: 'GET' });
+        const html = await response.text();
 
-        const html = await new Response(response.body).text();
         const baseTag = '<base href="' + targetUrl + '" />';
         const patchedHtml = /<head[^>]*>/i.test(html)
           ? html.replace(/<head[^>]*>/i, (match) => match + baseTag)
@@ -214,18 +209,21 @@
         viewport.src = URL.createObjectURL(blob);
         viewport.style.display = 'block';
         homeBtn.style.display = 'block';
-        statusEl.textContent = 'Ready (v9)';
+        statusEl.textContent = 'Ready (v11)';
       } catch (err) {
         statusEl.textContent = 'Failed at [' + step + ']\nError: ' + err.message;
       }
     }
 
     function runSearch() {
-      const val = queryInput.value.trim();
-      if (!val) return;
-      loadPage(formatTargetUrl(val));
+      try {
+        const val = queryInput.value.trim();
+        if (!val) return;
+        loadPage(formatTargetUrl(val));
+      } catch (err) {
+        statusEl.textContent = 'Search Error: ' + err.message;
+      }
     }
   </script>
 </body>
 </html>
-
