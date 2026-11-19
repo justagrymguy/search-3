@@ -100,7 +100,7 @@
     <form class="row" onsubmit="event.preventDefault(); runSearch();">
       <input id="query" type="text" placeholder="Search or enter URL..." />
       <button id="goBtn" type="submit">Go</button>
-      <button class="yt-btn" type="button" onclick="openUrl('https://www.youtube.com')">YouTube</button>
+      <button class="yt-btn" type="button" onclick="openUrl('https://youtube.com')">YouTube</button>
     </form>
     <div class="wisp-row">
       <label for="wispUrl">Wisp Server:</label>
@@ -153,31 +153,36 @@
     }
 
     async function initProxy() {
-      try {
-        const { ScramjetController } = $scramjetLoadController();
-        scramjet = new ScramjetController({
-          prefix: './scramjet/',
-          files: {
-            wasm: './scram/scramjet.wasm.wasm',
-            all: './scram/scramjet.all.js',
-            sync: './scram/scramjet.sync.js'
-          }
-        });
-        await scramjet.init();
-
-        const reg = await navigator.serviceWorker.register('./sw.js', { scope: './' });
-        await navigator.serviceWorker.ready;
-
-        connection = new BareMux.BareMuxConnection('./baremux/worker.js');
-        statusEl.textContent = 'Ready (Scramjet v1)';
-      } catch (err) {
-        statusEl.textContent = 'Init Error: ' + err.message;
+      if (typeof $scramjetLoadController !== 'function') {
+        throw new Error('scramjet.all.js did not load (check ./scram/scramjet.all.js)');
       }
+      if (typeof BareMux === 'undefined') {
+        throw new Error('baremux/index.js did not load (check ./baremux/index.js)');
+      }
+
+      const { ScramjetController } = $scramjetLoadController();
+      scramjet = new ScramjetController({
+        prefix: './scramjet/',
+        files: {
+          wasm: './scram/scramjet.wasm.wasm',
+          all: './scram/scramjet.all.js',
+          sync: './scram/scramjet.sync.js'
+        }
+      });
+      await scramjet.init();
+
+      await navigator.serviceWorker.register('./sw.js', { scope: './' });
+      await navigator.serviceWorker.ready;
+
+      connection = new BareMux.BareMuxConnection('./baremux/worker.js');
+      statusEl.textContent = 'Ready (Scramjet v1)';
     }
 
     async function openUrl(targetUrl) {
       try {
-        if (!scramjet || !connection) await initProxy();
+        if (!scramjet || !connection) {
+          await initProxy();
+        }
         const wispServer = getValidWisp(wispInput.value);
         wispInput.value = wispServer;
         localStorage.setItem('custom_wisp_url', wispServer);
@@ -190,7 +195,8 @@
         homeBtn.style.display = 'block';
         statusEl.textContent = 'Loaded ' + targetUrl;
       } catch (err) {
-        statusEl.textContent = 'Proxy Error: ' + err.message;
+        statusEl.textContent = 'Error: ' + (err.message || err);
+        console.error(err);
       }
     }
 
@@ -200,7 +206,10 @@
       openUrl(formatTargetUrl(val));
     }
 
-    initProxy();
+    initProxy().catch((err) => {
+      statusEl.textContent = 'Init Error: ' + (err.message || err);
+      console.error(err);
+    });
   </script>
 </body>
 </html>
