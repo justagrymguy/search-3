@@ -4,8 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Custom Search</title>
-  <script src="https://unpkg.com"></script>
-  <script src="https://unpkg.com"></script>
+  <script src="https://jsdelivr.net"></script>
+  <script src="https://jsdelivr.net"></script>
   <style>
     body {
       margin: 0;
@@ -116,8 +116,8 @@
     const BASE = '/search-3';
     const DEFAULT_WISP = 'wss://wisp.mercurywork.shop/';
     const SEARCH_BASE = 'https://duckduckgo.com';
-    const SCRAM_CDN = 'https://unpkg.com';
-    const EPOXY_CDN = 'https://unpkg.com';
+    const SCRAM_CDN = 'https://jsdelivr.net';
+    const EPOXY_CDN = 'https://jsdelivr.net';
 
     const queryInput = document.getElementById('query');
     const wispInput = document.getElementById('wispUrl');
@@ -170,10 +170,10 @@
       initPromise = (async () => {
         try {
           if (typeof $scramjetLoadController !== 'function') {
-            throw new Error('Scramjet CDN failed to load');
+            throw new Error('Scramjet script blocked or failed to load from jsDelivr');
           }
           if (typeof BareMux === 'undefined') {
-            throw new Error('BareMux CDN failed to load');
+            throw new Error('BareMux script blocked or failed to load from jsDelivr');
           }
 
           statusEl.textContent = 'Step 1/3: Loading Scramjet...';
@@ -248,3 +248,4 @@
   </script>
 </body>
 </html>
+
