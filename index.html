@@ -188,7 +188,7 @@
             new URL(targetUrl),
             'GET',
             null,
-            { 'User-Agent': navigator.userAgent },
+            [[ 'User-Agent', navigator.userAgent ]],
             null
           );
           html = await new Response(res.body).text();
