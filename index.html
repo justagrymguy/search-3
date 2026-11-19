@@ -100,7 +100,7 @@
       <label for="wispUrl">Wisp Server:</label>
       <input id="wispUrl" type="text" />
     </div>
-    <div id="status">Ready (v13)</div>
+    <div id="status">Ready (v15)</div>
   </div>
 
   <button id="homeBtn" type="button" onclick="closeViewport()">Home</button>
@@ -173,7 +173,7 @@
         step = 'Step 2/3: Connecting to Wisp...';
         statusEl.textContent = step;
 
-               const TransportClass = exp.default || exp.EpoxyTransport || exp.EpoxyClient;
+        const TransportClass = exp.default || exp.EpoxyTransport || exp.EpoxyClient;
         const transport = new TransportClass({ wisp: wispServer });
         if (typeof transport.init === 'function') {
           await transport.init();
@@ -188,7 +188,7 @@
             new URL(targetUrl),
             'GET',
             null,
-            [[ 'User-Agent', navigator.userAgent ]],
+            [['User-Agent', navigator.userAgent]],
             null
           );
           html = await new Response(res.body).text();
@@ -196,7 +196,6 @@
           const res = await transport.fetch(new URL(targetUrl), { method: 'GET' });
           html = await res.text();
         }
-
 
         const baseTag = '<base href="' + targetUrl + '" />';
         const patchedHtml = /<head[^>]*>/i.test(html)
@@ -222,7 +221,7 @@
         viewport.src = URL.createObjectURL(blob);
         viewport.style.display = 'block';
         homeBtn.style.display = 'block';
-        statusEl.textContent = 'Ready (v13)';
+        statusEl.textContent = 'Ready (v15)';
       } catch (err) {
         statusEl.textContent = 'Failed at [' + step + ']\nError: ' + err.message;
       }
@@ -240,5 +239,4 @@
   </script>
 </body>
 </html>
-
 
