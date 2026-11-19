@@ -4,6 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Custom Search</title>
+  <script src="./baremux/index.js"></script>
+  <script src="./scram/scramjet.all.js"></script>
   <style>
     body {
       margin: 0;
@@ -44,6 +46,9 @@
       cursor: pointer;
       font-weight: bold;
     }
+    .yt-btn {
+      background: #dc2626;
+    }
     .wisp-row {
       display: flex;
       align-items: center;
@@ -69,30 +74,13 @@
       word-break: break-word;
       white-space: pre-wrap;
     }
-    #navControls {
+    #homeBtn {
       display: none;
       position: fixed;
       bottom: 16px;
       right: 16px;
       z-index: 9999;
-      gap: 8px;
-      align-items: center;
-      background: rgba(18, 18, 18, 0.9);
-      padding: 6px 10px;
-      border-radius: 10px;
-      border: 1px solid #333;
-    }
-    #navControls button {
-      padding: 8px 14px;
-      font-size: 14px;
-    }
-    #navStatus {
-      font-size: 12px;
-      color: #93c5fd;
-      max-width: 260px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      padding: 10px 16px;
     }
     #viewport {
       display: none;
@@ -112,32 +100,30 @@
     <form class="row" onsubmit="event.preventDefault(); runSearch();">
       <input id="query" type="text" placeholder="Search or enter URL..." />
       <button id="goBtn" type="submit">Go</button>
+      <button class="yt-btn" type="button" onclick="openUrl('https://www.youtube.com')">YouTube</button>
     </form>
     <div class="wisp-row">
       <label for="wispUrl">Wisp Server:</label>
       <input id="wispUrl" type="text" />
     </div>
-    <div id="status">Ready (v17)</div>
+    <div id="status">Initializing Scramjet...</div>
   </div>
 
-  <div id="navControls">
-    <span id="navStatus"></span>
-    <button id="backBtn" type="button" onclick="goBack()">Back</button>
-    <button id="homeBtn" type="button" onclick="closeViewport()">Home</button>
-  </div>
+  <button id="homeBtn" type="button" onclick="closeViewport()">Home</button>
   <iframe id="viewport"></iframe>
 
   <script>
     const DEFAULT_WISP = 'wss://wisp.mercurywork.shop/';
-    const DDG_BASE = 'https://lite.duckduckgo.com/lite/';
+    const SEARCH_BASE = 'https://duckduckgo.com';
 
     const queryInput = document.getElementById('query');
     const wispInput = document.getElementById('wispUrl');
     const statusEl = document.getElementById('status');
-    const navControls = document.getElementById('navControls');
-    const navStatus = document.getElementById('navStatus');
     const viewport = document.getElementById('viewport');
-    const historyStack = [];
+    const homeBtn = document.getElementById('homeBtn');
+
+    let scramjet = null;
+    let connection = null;
 
     function getValidWisp(raw) {
       try {
@@ -153,158 +139,68 @@
 
     function closeViewport() {
       viewport.style.display = 'none';
-      navControls.style.display = 'none';
+      homeBtn.style.display = 'none';
       viewport.src = 'about:blank';
-      historyStack.length = 0;
-      statusEl.textContent = 'Ready (v17)';
-    }
-
-    function goBack() {
-      if (historyStack.length > 1) {
-        historyStack.pop();
-        const prev = historyStack.pop();
-        loadPage(prev);
-      } else {
-        closeViewport();
-      }
-    }
-
-    function unwrapUrl(rawUrl) {
-      try {
-        const normalized = rawUrl.startsWith('//') ? 'https:' + rawUrl : rawUrl;
-        const u = new URL(normalized);
-        if (u.hostname.includes('duckduckgo.com') && u.searchParams.has('uddg')) {
-          return decodeURIComponent(u.searchParams.get('uddg'));
-        }
-        return u.href;
-      } catch (_) {}
-      return rawUrl;
     }
 
     function formatTargetUrl(input) {
       const trimmed = input.trim();
-      try {
-        if (/^https?:\/\//i.test(trimmed)) return new URL(trimmed).href;
-        if (/^[a-z0-9-]+(\.[a-z0-9-]+)+(\/.*)?$/i.test(trimmed)) {
-          return new URL('https://' + trimmed).href;
-        }
-      } catch (_) {}
-      const searchUrl = new URL(DDG_BASE);
-      searchUrl.searchParams.set('q', trimmed);
-      return searchUrl.href;
-    }
-
-    async function fetchWithRedirects(transport, startUrl) {
-      let currentUrl = startUrl;
-      const reqHeaders = [
-        ['User-Agent', navigator.userAgent],
-        ['Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'],
-        ['Accept-Language', 'en-US,en;q=0.9']
-      ];
-
-      for (let i = 0; i < 5; i++) {
-        navStatus.textContent = 'Loading ' + currentUrl;
-        statusEl.textContent = 'Step 3/3: Fetching ' + currentUrl + '...';
-
-        if (typeof transport.request === 'function') {
-          const res = await transport.request(new URL(currentUrl), 'GET', null, reqHeaders, null);
-          const status = res.status || 200;
-          const headers = new Headers(res.headers || {});
-          const loc = headers.get('location');
-          if ([301, 302, 303, 307, 308].includes(status) && loc) {
-            currentUrl = new URL(loc, currentUrl).href;
-            continue;
-          }
-          const html = await new Response(res.body).text();
-          return { html, finalUrl: currentUrl, status };
-        } else {
-          const res = await transport.fetch(new URL(currentUrl), { method: 'GET' });
-          const html = await res.text();
-          return { html, finalUrl: currentUrl, status: res.status || 200 };
-        }
+      if (/^https?:\/\//i.test(trimmed)) return new URL(trimmed).href;
+      if (/^[a-z0-9-]+(\.[a-z0-9-]+)+(\/.*)?$/i.test(trimmed)) {
+        return new URL('https://' + trimmed).href;
       }
-      throw new Error('Too many redirects');
+      return SEARCH_BASE + encodeURIComponent(trimmed);
     }
 
-    async function loadPage(rawUrl) {
-      let step = 'Step 1/3: Loading local Epoxy...';
-      statusEl.textContent = step;
-      navStatus.textContent = step;
-
+    async function initProxy() {
       try {
-        const targetUrl = unwrapUrl(rawUrl);
+        const { ScramjetController } = $scramjetLoadController();
+        scramjet = new ScramjetController({
+          prefix: './scramjet/',
+          files: {
+            wasm: './scram/scramjet.wasm.wasm',
+            all: './scram/scramjet.all.js',
+            sync: './scram/scramjet.sync.js'
+          }
+        });
+        await scramjet.init();
+
+        const reg = await navigator.serviceWorker.register('./sw.js', { scope: './' });
+        await navigator.serviceWorker.ready;
+
+        connection = new BareMux.BareMuxConnection('./baremux/worker.js');
+        statusEl.textContent = 'Ready (Scramjet v1)';
+      } catch (err) {
+        statusEl.textContent = 'Init Error: ' + err.message;
+      }
+    }
+
+    async function openUrl(targetUrl) {
+      try {
+        if (!scramjet || !connection) await initProxy();
         const wispServer = getValidWisp(wispInput.value);
         wispInput.value = wispServer;
         localStorage.setItem('custom_wisp_url', wispServer);
 
-        const mod = await import('./epoxy.js');
-        const exp = mod.default && typeof mod.default === 'object' ? { ...mod.default, ...mod } : mod;
+        statusEl.textContent = 'Connecting to Wisp...';
+        await connection.setTransport('./epoxy/index.mjs', [{ wisp: wispServer }]);
 
-        step = 'Step 2/3: Connecting to Wisp...';
-        statusEl.textContent = step;
-        navStatus.textContent = step;
-
-        const TransportClass = exp.default || exp.EpoxyTransport || exp.EpoxyClient;
-        const transport = new TransportClass({ wisp: wispServer });
-        if (typeof transport.init === 'function') {
-          await transport.init();
-        }
-
-        step = 'Step 3/3: Fetching ' + targetUrl + '...';
-        const { html, finalUrl, status } = await fetchWithRedirects(transport, targetUrl);
-
-        if (!html || html.trim().length < 20) {
-          throw new Error('Empty page returned (HTTP ' + status + ') from ' + finalUrl);
-        }
-
-        if (historyStack[historyStack.length - 1] !== finalUrl) {
-          historyStack.push(finalUrl);
-        }
-
-        const baseTag = '<base href="' + finalUrl + '" />';
-        const patchedHtml = /<head[^>]*>/i.test(html)
-          ? html.replace(/<head[^>]*>/i, (match) => match + baseTag)
-          : baseTag + html;
-
-        const blob = new Blob([patchedHtml], { type: 'text/html' });
-        viewport.onload = () => {
-          try {
-            const doc = viewport.contentDocument;
-            if (!doc) return;
-            doc.addEventListener('click', (e) => {
-              const a = e.target.closest('a[href]');
-              if (!a) return;
-              const href = a.getAttribute('href');
-              if (!href || href.startsWith('#') || href.startsWith('javascript:')) return;
-              e.preventDefault();
-              const resolved = href.startsWith('//')
-                ? 'https:' + href
-                : new URL(href, finalUrl).href;
-              loadPage(resolved);
-            }, true);
-          } catch (_) {}
-        };
-
-        viewport.src = URL.createObjectURL(blob);
+        viewport.src = scramjet.encodeUrl(targetUrl);
         viewport.style.display = 'block';
-        navControls.style.display = 'flex';
-        navStatus.textContent = finalUrl;
-        statusEl.textContent = 'Ready (v17)';
+        homeBtn.style.display = 'block';
+        statusEl.textContent = 'Loaded ' + targetUrl;
       } catch (err) {
-        statusEl.textContent = 'Failed at [' + step + ']\nError: ' + err.message;
-        navStatus.textContent = 'Error: ' + err.message;
+        statusEl.textContent = 'Proxy Error: ' + err.message;
       }
     }
 
     function runSearch() {
-      try {
-        const val = queryInput.value.trim();
-        if (!val) return;
-        loadPage(formatTargetUrl(val));
-      } catch (err) {
-        statusEl.textContent = 'Search Error: ' + err.message;
-      }
+      const val = queryInput.value.trim();
+      if (!val) return;
+      openUrl(formatTargetUrl(val));
     }
+
+    initProxy();
   </script>
 </body>
 </html>
