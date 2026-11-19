@@ -100,18 +100,16 @@
       <label for="wispUrl">Wisp Server:</label>
       <input id="wispUrl" type="text" />
     </div>
-    <div id="status">Ready (v11)</div>
+    <div id="status">Ready (v12)</div>
   </div>
 
   <button id="homeBtn" type="button" onclick="closeViewport()">Home</button>
   <iframe id="viewport"></iframe>
 
   <script>
-    const PROTO_HTTPS = 'https:' + '//';
-    const PROTO_WSS = 'wss:' + '//';
-    const DEFAULT_WISP = PROTO_WSS + 'wisp.mercurywork.shop/';
-    const CDN_MOD = PROTO_HTTPS + 'cdn.jsdelivr.net/npm/@mercuryworkshop/epoxy-transport@3/+esm';
-    const DDG_BASE = PROTO_HTTPS + '://duckduckgo.com';
+    const DEFAULT_WISP = 'wss://wisp.mercurywork.shop/';
+    const CDN_MOD = 'https://jsdelivr.net';
+    const DDG_BASE = 'https://duckduckgo.com';
 
     const queryInput = document.getElementById('query');
     const wispInput = document.getElementById('wispUrl');
@@ -149,8 +147,12 @@
 
     function formatTargetUrl(input) {
       const trimmed = input.trim();
-      if (/^https?:\/\//i.test(trimmed)) return new URL(trimmed).href;
-      if (/^[a-z0-9-]+(\.[a-z0-9-]+)+/i.test(trimmed)) return new URL(PROTO_HTTPS + trimmed).href;
+      try {
+        if (/^https?:\/\//i.test(trimmed)) return new URL(trimmed).href;
+        if (/^[a-z0-9-]+(\.[a-z0-9-]+)+(\/.*)?$/i.test(trimmed)) {
+          return new URL('https://' + trimmed).href;
+        }
+      } catch (_) {}
       const searchUrl = new URL(DDG_BASE);
       searchUrl.searchParams.set('q', trimmed);
       return searchUrl.href;
@@ -182,7 +184,7 @@
         step = 'Step 3/3: Fetching ' + targetUrl + '...';
         statusEl.textContent = step;
 
-        const response = await transport.fetch(targetUrl, { method: 'GET' });
+        const response = await transport.fetch(new URL(targetUrl), { method: 'GET' });
         const html = await response.text();
 
         const baseTag = '<base href="' + targetUrl + '" />';
@@ -209,7 +211,7 @@
         viewport.src = URL.createObjectURL(blob);
         viewport.style.display = 'block';
         homeBtn.style.display = 'block';
-        statusEl.textContent = 'Ready (v11)';
+        statusEl.textContent = 'Ready (v12)';
       } catch (err) {
         statusEl.textContent = 'Failed at [' + step + ']\nError: ' + err.message;
       }
@@ -227,3 +229,4 @@
   </script>
 </body>
 </html>
+
