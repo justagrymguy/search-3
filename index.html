@@ -173,18 +173,30 @@
         step = 'Step 2/3: Connecting to Wisp...';
         statusEl.textContent = step;
 
-        const EpoxyClient = exp.EpoxyClient || exp.default;
-        const EpoxyClientOptions = exp.EpoxyClientOptions;
-        const options = new EpoxyClientOptions();
-        options.user_agent = navigator.userAgent;
-
-        const transport = new EpoxyClient(wispServer, options);
+               const TransportClass = exp.default || exp.EpoxyTransport || exp.EpoxyClient;
+        const transport = new TransportClass({ wisp: wispServer });
+        if (typeof transport.init === 'function') {
+          await transport.init();
+        }
 
         step = 'Step 3/3: Fetching ' + targetUrl + '...';
         statusEl.textContent = step;
 
-        const response = await transport.fetch(new URL(targetUrl), { method: 'GET' });
-        const html = await response.text();
+        let html;
+        if (typeof transport.request === 'function') {
+          const res = await transport.request(
+            new URL(targetUrl),
+            'GET',
+            null,
+            { 'User-Agent': navigator.userAgent },
+            null
+          );
+          html = await new Response(res.body).text();
+        } else {
+          const res = await transport.fetch(new URL(targetUrl), { method: 'GET' });
+          html = await res.text();
+        }
+
 
         const baseTag = '<base href="' + targetUrl + '" />';
         const patchedHtml = /<head[^>]*>/i.test(html)
