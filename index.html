@@ -3,9 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Custom Search</title>
-  <script src="https://jsdelivr.net"></script>
-  <script src="https://jsdelivr.net"></script>
+  <title>NoCookie Player</title>
   <style>
     body {
       margin: 0;
@@ -16,236 +14,95 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      height: 100vh;
-    }
-    #ui {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
+      min-height: 100vh;
       gap: 14px;
+      padding: 16px;
+      box-sizing: border-box;
     }
-    .row {
+    .bar {
       display: flex;
-      gap: 10px;
+      gap: 8px;
+      width: 100%;
+      max-width: 800px;
     }
-    input[type="text"] {
-      padding: 12px 16px;
-      font-size: 16px;
+    input {
+      flex: 1;
+      padding: 12px 14px;
+      font-size: 15px;
       border-radius: 8px;
       border: none;
-      width: 300px;
       outline: none;
     }
     button {
-      padding: 12px 20px;
-      font-size: 16px;
+      padding: 12px 18px;
+      font-size: 15px;
       border-radius: 8px;
       border: none;
-      background: #3b82f6;
-      color: white;
-      cursor: pointer;
-      font-weight: bold;
-    }
-    .yt-btn {
       background: #dc2626;
+      color: white;
+      font-weight: bold;
+      cursor: pointer;
     }
-    .wisp-row {
+    .presets {
       display: flex;
-      align-items: center;
+      flex-wrap: wrap;
       gap: 8px;
+      justify-content: center;
+    }
+    .presets button {
+      background: #27272a;
       font-size: 13px;
-      color: #aaa;
+      padding: 8px 12px;
     }
-    #wispUrl {
-      padding: 6px 10px;
-      font-size: 13px;
-      border-radius: 6px;
-      border: 1px solid #333;
-      background: #1e1e1e;
-      color: #ddd;
-      width: 240px;
-    }
-    #status {
-      font-size: 13px;
-      color: #60a5fa;
-      max-width: 560px;
-      text-align: center;
-      min-height: 20px;
-      word-break: break-word;
-      white-space: pre-wrap;
-    }
-    #homeBtn {
-      display: none;
-      position: fixed;
-      bottom: 16px;
-      right: 16px;
-      z-index: 9999;
-      padding: 10px 16px;
-    }
-    #viewport {
-      display: none;
-      position: fixed;
-      top: 0;
-      left: 0;
+    iframe {
       width: 100%;
-      height: 100%;
+      max-width: 960px;
+      aspect-ratio: 16 / 9;
       border: none;
-      background: white;
+      border-radius: 12px;
+      background: #000;
     }
   </style>
 </head>
 <body>
-  <div id="ui">
-    <h1 style="margin: 0;">Custom Search</h1>
-    <form class="row" onsubmit="event.preventDefault(); runSearch();">
-      <input id="query" type="text" placeholder="Search or enter URL..." />
-      <button id="goBtn" type="submit">Go</button>
-      <button class="yt-btn" type="button" onclick="openUrl('https://youtube.com')">YouTube</button>
-    </form>
-    <div class="wisp-row">
-      <label for="wispUrl">Wisp Server:</label>
-      <input id="wispUrl" type="text" />
-    </div>
-    <div id="status">Initializing Scramjet...</div>
+  <form class="bar" onsubmit="event.preventDefault(); playInput();">
+    <input id="urlInput" type="text" placeholder="Paste YouTube link or 11-char Video ID..." />
+    <button type="submit">Watch</button>
+  </form>
+
+  <div class="presets">
+    <button type="button" onclick="loadId('Sf_4HxUU7mk')">Best of CamNeverEnding 2025</button>
+    <button type="button" onclick="loadId('lQygL-EQL0Q')">Suicide Bombing in JJS</button>
+    <button type="button" onclick="loadId('cWF2WK_wTxs')">Teaming YouTuber Bug Abusing</button>
+    <button type="button" onclick="loadId('PSN2tJTEYNE')">Corniest Runner Ever</button>
   </div>
 
-  <button id="homeBtn" type="button" onclick="closeViewport()">Home</button>
-  <iframe id="viewport"></iframe>
+  <iframe
+    id="player"
+    src="https://youtube-nocookie.com"
+    referrerpolicy="strict-origin-when-cross-origin"
+    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+    allowfullscreen>
+  </iframe>
 
   <script>
-    const BASE = '/search-3';
-    const DEFAULT_WISP = 'wss://wisp.mercurywork.shop/';
-    const SEARCH_BASE = 'https://duckduckgo.com';
-    const SCRAM_CDN = 'https://jsdelivr.net';
-    const EPOXY_CDN = 'https://jsdelivr.net';
-
-    const queryInput = document.getElementById('query');
-    const wispInput = document.getElementById('wispUrl');
-    const statusEl = document.getElementById('status');
-    const viewport = document.getElementById('viewport');
-    const homeBtn = document.getElementById('homeBtn');
-
-    let scramjet = null;
-    let connection = null;
-    let initPromise = null;
-
-    function withTimeout(promise, ms, label) {
-      return Promise.race([
-        promise,
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error(label + ' timed out after ' + (ms / 1000) + 's')), ms)
-        )
-      ]);
+    function loadId(id) {
+      document.getElementById('player').src = 'https://youtube-nocookie.com' + id + '?autoplay=1';
     }
 
-    function getValidWisp(raw) {
-      try {
-        const u = new URL((raw || '').trim());
-        if ((u.protocol === 'wss:' || u.protocol === 'ws:') && u.hostname.includes('.')) {
-          return u.href.endsWith('/') ? u.href : u.href + '/';
-        }
-      } catch (_) {}
-      return DEFAULT_WISP;
-    }
-
-    wispInput.value = getValidWisp(localStorage.getItem('custom_wisp_url'));
-
-    function closeViewport() {
-      viewport.style.display = 'none';
-      homeBtn.style.display = 'none';
-      viewport.src = 'about:blank';
-    }
-
-    function formatTargetUrl(input) {
-      const trimmed = input.trim();
-      if (/^https?:\/\//i.test(trimmed)) return new URL(trimmed).href;
-      if (/^[a-z0-9-]+(\.[a-z0-9-]+)+(\/.*)?$/i.test(trimmed)) {
-        return new URL('https://' + trimmed).href;
+    function playInput() {
+      const str = document.getElementById('urlInput').value.trim();
+      if (/^[a-zA-Z0-9_-]{11}$/.test(str)) {
+        loadId(str);
+        return;
       }
-      return SEARCH_BASE + encodeURIComponent(trimmed);
-    }
-
-    async function initProxy() {
-      if (initPromise) return initPromise;
-      initPromise = (async () => {
-        try {
-          if (typeof $scramjetLoadController !== 'function') {
-            throw new Error('Scramjet script blocked or failed to load from jsDelivr');
-          }
-          if (typeof BareMux === 'undefined') {
-            throw new Error('BareMux script blocked or failed to load from jsDelivr');
-          }
-
-          statusEl.textContent = 'Step 1/3: Loading Scramjet...';
-          const { ScramjetController } = $scramjetLoadController();
-          scramjet = new ScramjetController({
-            prefix: BASE + '/scramjet/',
-            files: {
-              wasm: SCRAM_CDN + '/scramjet.wasm.wasm',
-              all: SCRAM_CDN + '/scramjet.all.js',
-              sync: SCRAM_CDN + '/scramjet.sync.js'
-            }
-          });
-          await withTimeout(scramjet.init(), 6000, 'scramjet.init()');
-
-          statusEl.textContent = 'Step 2/3: Registering sw.js...';
-          await withTimeout(
-            navigator.serviceWorker.register(BASE + '/sw.js', { scope: BASE + '/' }),
-            5000,
-            'Service Worker register'
-          );
-          await withTimeout(
-            navigator.serviceWorker.ready,
-            5000,
-            'Service Worker ready'
-          );
-
-          statusEl.textContent = 'Step 3/3: Starting BareMux...';
-          connection = new BareMux.BareMuxConnection(BASE + '/baremux-worker.js');
-          statusEl.textContent = 'Ready (Scramjet CDN)';
-        } catch (err) {
-          initPromise = null;
-          throw err;
-        }
-      })();
-      return initPromise;
-    }
-
-    async function openUrl(targetUrl) {
-      try {
-        await initProxy();
-        const wispServer = getValidWisp(wispInput.value);
-        wispInput.value = wispServer;
-        localStorage.setItem('custom_wisp_url', wispServer);
-
-        statusEl.textContent = 'Connecting to Wisp...';
-        await withTimeout(
-          connection.setTransport(EPOXY_CDN, [{ wisp: wispServer }]),
-          6000,
-          'setTransport'
-        );
-
-        viewport.src = scramjet.encodeUrl(targetUrl);
-        viewport.style.display = 'block';
-        homeBtn.style.display = 'block';
-        statusEl.textContent = 'Loaded ' + targetUrl;
-      } catch (err) {
-        statusEl.textContent = 'Error: ' + (err.message || err);
-        console.error(err);
+      const match = str.match(/(?:v=|youtu\.be\/|embed\/|shorts\/)([a-zA-Z0-9_-]{11})/);
+      if (match) {
+        loadId(match);
+      } else {
+        alert('Enter a valid YouTube URL or 11-character Video ID.');
       }
     }
-
-    function runSearch() {
-      const val = queryInput.value.trim();
-      if (!val) return;
-      openUrl(formatTargetUrl(val));
-    }
-
-    initProxy().catch((err) => {
-      statusEl.textContent = 'Init Error: ' + (err.message || err);
-      console.error(err);
-    });
   </script>
 </body>
 </html>
-
