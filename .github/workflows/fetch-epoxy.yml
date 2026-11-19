@@ -1,4 +1,4 @@
-name: Fetch Epoxy
+name: Fetch Proxy Files
 on: workflow_dispatch
 permissions:
   contents: write
@@ -8,13 +8,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: |
-          npm pack @mercuryworkshop/epoxy-transport@3.0.2
+          mkdir -p scram baremux epoxy
+          npm pack @mercuryworkshop/scramjet@2.0.0-alpha @mercuryworkshop/bare-mux@2.1.9 @mercuryworkshop/epoxy-transport@3.0.2
+          tar -xzf mercuryworkshop-scramjet-2.0.0-alpha.tgz
+          cp -r package/dist/* scram/
+          rm -rf package mercuryworkshop-scramjet-2.0.0-alpha.tgz
+
+          tar -xzf mercuryworkshop-bare-mux-2.1.9.tgz
+          cp -r package/dist/* baremux/
+          rm -rf package mercuryworkshop-bare-mux-2.1.9.tgz
+
           tar -xzf mercuryworkshop-epoxy-transport-3.0.2.tgz
+          cp -r package/dist/* epoxy/
           cp package/dist/index.mjs epoxy.js
           rm -rf package mercuryworkshop-epoxy-transport-3.0.2.tgz
       - run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-          git add epoxy.js
-          git commit -m "Add epoxy.js" || exit 0
+          git add scram baremux epoxy epoxy.js
+          git commit -m "Add Scramjet and BareMux bundles" || exit 0
           git push
