@@ -69,13 +69,30 @@
       word-break: break-word;
       white-space: pre-wrap;
     }
-    #homeBtn {
+    #navControls {
       display: none;
       position: fixed;
       bottom: 16px;
       right: 16px;
       z-index: 9999;
-      padding: 10px 16px;
+      gap: 8px;
+      align-items: center;
+      background: rgba(18, 18, 18, 0.9);
+      padding: 6px 10px;
+      border-radius: 10px;
+      border: 1px solid #333;
+    }
+    #navControls button {
+      padding: 8px 14px;
+      font-size: 14px;
+    }
+    #navStatus {
+      font-size: 12px;
+      color: #93c5fd;
+      max-width: 260px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     #viewport {
       display: none;
@@ -100,21 +117,27 @@
       <label for="wispUrl">Wisp Server:</label>
       <input id="wispUrl" type="text" />
     </div>
-    <div id="status">Ready (v15)</div>
+    <div id="status">Ready (v17)</div>
   </div>
 
-  <button id="homeBtn" type="button" onclick="closeViewport()">Home</button>
+  <div id="navControls">
+    <span id="navStatus"></span>
+    <button id="backBtn" type="button" onclick="goBack()">Back</button>
+    <button id="homeBtn" type="button" onclick="closeViewport()">Home</button>
+  </div>
   <iframe id="viewport"></iframe>
 
   <script>
     const DEFAULT_WISP = 'wss://wisp.mercurywork.shop/';
-    const DDG_BASE = 'https://lite.duckduckgo.com/lite/';
+    const DDG_BASE = 'https://duckduckgo.com';
 
     const queryInput = document.getElementById('query');
     const wispInput = document.getElementById('wispUrl');
     const statusEl = document.getElementById('status');
+    const navControls = document.getElementById('navControls');
+    const navStatus = document.getElementById('navStatus');
     const viewport = document.getElementById('viewport');
-    const homeBtn = document.getElementById('homeBtn');
+    const historyStack = [];
 
     function getValidWisp(raw) {
       try {
@@ -130,16 +153,30 @@
 
     function closeViewport() {
       viewport.style.display = 'none';
-      homeBtn.style.display = 'none';
+      navControls.style.display = 'none';
       viewport.src = 'about:blank';
+      historyStack.length = 0;
+      statusEl.textContent = 'Ready (v17)';
+    }
+
+    function goBack() {
+      if (historyStack.length > 1) {
+        historyStack.pop();
+        const prev = historyStack.pop();
+        loadPage(prev);
+      } else {
+        closeViewport();
+      }
     }
 
     function unwrapUrl(rawUrl) {
       try {
-        const u = new URL(rawUrl);
+        const normalized = rawUrl.startsWith('//') ? 'https:' + rawUrl : rawUrl;
+        const u = new URL(normalized);
         if (u.hostname.includes('duckduckgo.com') && u.searchParams.has('uddg')) {
-          return u.searchParams.get('uddg');
+          return decodeURIComponent(u.searchParams.get('uddg'));
         }
+        return u.href;
       } catch (_) {}
       return rawUrl;
     }
@@ -157,9 +194,42 @@
       return searchUrl.href;
     }
 
+    async function fetchWithRedirects(transport, startUrl) {
+      let currentUrl = startUrl;
+      const reqHeaders = [
+        ['User-Agent', navigator.userAgent],
+        ['Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'],
+        ['Accept-Language', 'en-US,en;q=0.9']
+      ];
+
+      for (let i = 0; i < 5; i++) {
+        navStatus.textContent = 'Loading ' + currentUrl;
+        statusEl.textContent = 'Step 3/3: Fetching ' + currentUrl + '...';
+
+        if (typeof transport.request === 'function') {
+          const res = await transport.request(new URL(currentUrl), 'GET', null, reqHeaders, null);
+          const status = res.status || 200;
+          const headers = new Headers(res.headers || {});
+          const loc = headers.get('location');
+          if ([301, 302, 303, 307, 308].includes(status) && loc) {
+            currentUrl = new URL(loc, currentUrl).href;
+            continue;
+          }
+          const html = await new Response(res.body).text();
+          return { html, finalUrl: currentUrl, status };
+        } else {
+          const res = await transport.fetch(new URL(currentUrl), { method: 'GET' });
+          const html = await res.text();
+          return { html, finalUrl: currentUrl, status: res.status || 200 };
+        }
+      }
+      throw new Error('Too many redirects');
+    }
+
     async function loadPage(rawUrl) {
       let step = 'Step 1/3: Loading local Epoxy...';
       statusEl.textContent = step;
+      navStatus.textContent = step;
 
       try {
         const targetUrl = unwrapUrl(rawUrl);
@@ -172,6 +242,7 @@
 
         step = 'Step 2/3: Connecting to Wisp...';
         statusEl.textContent = step;
+        navStatus.textContent = step;
 
         const TransportClass = exp.default || exp.EpoxyTransport || exp.EpoxyClient;
         const transport = new TransportClass({ wisp: wispServer });
@@ -180,24 +251,17 @@
         }
 
         step = 'Step 3/3: Fetching ' + targetUrl + '...';
-        statusEl.textContent = step;
+        const { html, finalUrl, status } = await fetchWithRedirects(transport, targetUrl);
 
-        let html;
-        if (typeof transport.request === 'function') {
-          const res = await transport.request(
-            new URL(targetUrl),
-            'GET',
-            null,
-            [['User-Agent', navigator.userAgent]],
-            null
-          );
-          html = await new Response(res.body).text();
-        } else {
-          const res = await transport.fetch(new URL(targetUrl), { method: 'GET' });
-          html = await res.text();
+        if (!html || html.trim().length < 20) {
+          throw new Error('Empty page returned (HTTP ' + status + ') from ' + finalUrl);
         }
 
-        const baseTag = '<base href="' + targetUrl + '" />';
+        if (historyStack[historyStack.length - 1] !== finalUrl) {
+          historyStack.push(finalUrl);
+        }
+
+        const baseTag = '<base href="' + finalUrl + '" />';
         const patchedHtml = /<head[^>]*>/i.test(html)
           ? html.replace(/<head[^>]*>/i, (match) => match + baseTag)
           : baseTag + html;
@@ -213,17 +277,22 @@
               const href = a.getAttribute('href');
               if (!href || href.startsWith('#') || href.startsWith('javascript:')) return;
               e.preventDefault();
-              loadPage(new URL(href, targetUrl).href);
+              const resolved = href.startsWith('//')
+                ? 'https:' + href
+                : new URL(href, finalUrl).href;
+              loadPage(resolved);
             }, true);
           } catch (_) {}
         };
 
         viewport.src = URL.createObjectURL(blob);
         viewport.style.display = 'block';
-        homeBtn.style.display = 'block';
-        statusEl.textContent = 'Ready (v15)';
+        navControls.style.display = 'flex';
+        navStatus.textContent = finalUrl;
+        statusEl.textContent = 'Ready (v17)';
       } catch (err) {
         statusEl.textContent = 'Failed at [' + step + ']\nError: ' + err.message;
+        navStatus.textContent = 'Error: ' + err.message;
       }
     }
 
