@@ -79,7 +79,7 @@
 
   <iframe
     id="player"
-    src="https://youtube-nocookie.com/embed/"
+    src="https://youtube-nocookie.com"
     referrerpolicy="strict-origin-when-cross-origin"
     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
     allowfullscreen>
@@ -87,7 +87,7 @@
 
   <script>
     function loadId(id) {
-      document.getElementById('player').src = 'https://youtube-nocookie.com' + id + '?autoplay=1';
+      document.getElementById('player').src = 'https://www.youtube-nocookie.com/embed/' + id + '?autoplay=1';
     }
 
     function playInput() {
@@ -96,9 +96,9 @@
         loadId(str);
         return;
       }
-      const match = str.match(/(?:v=|youtu\.be\/|embed\/|shorts\/)([a-zA-Z0-9_-]{11})/);
+      const match = str.match(/(?:v=|youtu\.be\/|embed\/|shorts\/|live\/)([a-zA-Z0-9_-]{11})/);
       if (match) {
-        loadId(match);
+        loadId(match[1]);
       } else {
         alert('Enter a valid YouTube URL or 11-character Video ID.');
       }
